@@ -5,7 +5,7 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Mushtaq Ahmed</title>
+  <title>Synchronizing Scala Futures: Comparing Styles - Mushtaq Ahmed</title>
   <meta name="author" content="Your Name">
 
   
@@ -18,7 +18,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://mushtaq.github.io">
+  <link rel="canonical" href="http://mushtaq.github.io/blog/2013/03/09/synchronizing-scala-futures-comparing-styles">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <link href="/atom.xml" rel="alternate" title="Mushtaq Ahmed" type="application/atom+xml">
@@ -63,15 +63,12 @@
 </nav>
   <div id="main">
     <div id="content">
-      <div class="blog-index">
+      <div>
+<article class="hentry" role="article">
   
-  
-  
-    <article>
-      
   <header>
     
-      <h1 class="entry-title"><a href="/blog/2013/03/09/synchronizing-scala-futures-comparing-styles/">Synchronizing Scala Futures: Comparing Styles</a></h1>
+      <h1 class="entry-title">Synchronizing Scala Futures: Comparing Styles</h1>
     
     
       <p class="meta">
@@ -94,7 +91,7 @@
   </header>
 
 
-  <div class="entry-content"><p>You deal with <a href="http://docs.scala-lang.org/overviews/core/futures.html">futures</a> all the time if you are using <a href="http://www.playframework.com/">play framework</a>. For example, call to external webservices or mongodb via <a href="http://reactivemongo.org/">reactivemongo</a> driver returns future. Consider the signatures of two apis from repository classes wrapping mongodb access:</p>
+<div class="entry-content"><p>You deal with <a href="http://docs.scala-lang.org/overviews/core/futures.html">futures</a> all the time if you are using <a href="http://www.playframework.com/">play framework</a>. For example, call to external webservices or mongodb via <a href="http://reactivemongo.org/">reactivemongo</a> driver returns future. Consider the signatures of two apis from repository classes wrapping mongodb access:</p>
 
 <figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
 <span class='line-number'>2</span>
@@ -173,18 +170,57 @@
 
 <p>We have been using dataflow style with futures a lot in our project and it has worked very well so far. Continuations bring in their own constraints on the structure of your code. Compiler generated error messages when you violate those constraints are intimidating. We will discuss how to deal with them in a future post.</p>
 </div>
+
+
+  <footer>
+    <p class="meta">
+      
   
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+
+
+
+
   
 
 
-    </article>
+<time datetime="2013-03-09T16:02:00+05:30" pubdate data-updated="true">Mar 9<span>th</span>, 2013</time>
+      
+
+<span class="categories">
   
-  <div class="pagination">
+    <a class='category' href='/blog/categories/futures/'>futures</a>, <a class='category' href='/blog/categories/scala/'>scala</a>
+  
+</span>
+
+
+    </p>
     
-    <a href="/blog/archives">Blog Archives</a>
-    
-  </div>
+      <div class="sharing">
+  
+  <a href="//twitter.com/share" class="twitter-share-button" data-url="http://mushtaq.github.io/blog/2013/03/09/synchronizing-scala-futures-comparing-styles/" data-via="" data-counturl="http://mushtaq.github.io/blog/2013/03/09/synchronizing-scala-futures-comparing-styles/" >Tweet</a>
+  
+  
+  
 </div>
+
+    
+    <p class="meta">
+      
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
 <aside class="sidebar">
   
     <section>
@@ -204,6 +240,7 @@
 
   
 </aside>
+
 
     </div>
   </div>

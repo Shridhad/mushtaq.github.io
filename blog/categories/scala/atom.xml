@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Scala | Mushtaq Ahmed]]></title>
+  <link href="http://mushtaq.github.io/blog/categories/scala/atom.xml" rel="self"/>
+  <link href="http://mushtaq.github.io/"/>
+  <updated>2013-12-07T17:21:26+05:30</updated>
+  <id>http://mushtaq.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Synchronizing Scala Futures: Comparing Styles]]></title>
+    <link href="http://mushtaq.github.io/blog/2013/03/09/synchronizing-scala-futures-comparing-styles/"/>
+    <updated>2013-03-09T16:02:00+05:30</updated>
+    <id>http://mushtaq.github.io/blog/2013/03/09/synchronizing-scala-futures-comparing-styles</id>
+    <content type="html"><![CDATA[<p>You deal with <a href="http://docs.scala-lang.org/overviews/core/futures.html">futures</a> all the time if you are using <a href="http://www.playframework.com/">play framework</a>. For example, call to external webservices or mongodb via <a href="http://reactivemongo.org/">reactivemongo</a> driver returns future. Consider the signatures of two apis from repository classes wrapping mongodb access:</p>
+
+<p>``` scala
+productRepo.getProduct(name: String): Future[Product]</p>
+
+<p>metadataRepo.getProductMetadata(productId: String): Future[Metadata]
+```</p>
+
+<p>You will have to use the result of the first call to obtain the productId required for the second call. But the return type for both the calls are futures, so how to use the product value inside a future without blocking it. Well, using higher order function flatMap defined on futures, you can do something like:</p>
+
+<p>``` scala
+val metadata: Future[Metadata] =</p>
+
+<pre><code>productRepo.getProduct("watch").flatMap { product =&gt;
+    metadataRepo.getProductMetadata(product.id)
+}
+</code></pre>
+
+<p>```</p>
+
+<p>There are a lot of other useful combinators defined for futures like map, filter, recover etc. Here, flatMap ensure that call to getProductMetadata will not happen unless future returned by getProduct is successful. An important insight is that composing futures using combinators like flatMap is essentially synchronizing futures without blocking.</p>
+
+<p>We know that flatMap operations can also be represented as for comprehension. Like this:</p>
+
+<p>``` scala
+val metadata: Future[Metadata] = for {</p>
+
+<pre><code>product &lt;- productRepo.getProduct("watch")
+metadata &lt;- metadataRepo.getProductMetadata(product.id)
+</code></pre>
+
+<p>} yield metadata
+```</p>
+
+<p>Unlike flatMap invloves for does not do invert the program flow. Hence, in general code using for is more readable than directly using flatMap. This may not be the case always. For example if we want to throw exception if product is not available in the store, for approach is more complicated compared to flatMap:</p>
+
+<p>``` scala
+val metadata: Future[Metadata] = for {</p>
+
+<pre><code>product &lt;- productRepo.getProduct("watch")
+metadata &lt;- {
+    if (product.isNotAvailable)
+        throw new ProductNotAvailableException("product not found")
+    metadataRepo.getProductMetadata(product.id)
+}
+</code></pre>
+
+<p>} yield metadata
+```</p>
+
+<p>There is an alternate way to synchronize futures using continuations also known as dataflow style. We will have to use <a href="http://doc.akka.io/docs/akka/2.1.0/scala/dataflow.html">akka&rsquo;s dataflow library</a> which provides a flow block inside which call to apply() on futures returns the contained element (it does not actually return but it does look like that). This style is somewhat similar to for comprehensions but allows mixing imperative code with dataflow style very easy. The above program then can be written as:</p>
+
+<p>``` scala
+val metadata: Future[Metadata] = flow {</p>
+
+<pre><code>val product = productRepo.getProduct("watch")()
+if (product.isNotAvailable)
+    throw new ProductNotAvailableException("product not found")
+metadataRepo.getProductMetadata(product.id)()
+</code></pre>
+
+<p>}
+```</p>
+
+<p>We have been using dataflow style with futures a lot in our project and it has worked very well so far. Continuations bring in their own constraints on the structure of your code. Compiler generated error messages when you violate those constraints are intimidating. We will discuss how to deal with them in a future post.</p>
+]]></content>
+  </entry>
+  
+</feed>
