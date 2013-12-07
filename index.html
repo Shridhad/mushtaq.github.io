@@ -6,10 +6,10 @@
 <head>
   <meta charset="utf-8">
   <title>Mushtaq Ahmed</title>
-  <meta name="author" content="Your Name">
+  <meta name="author" content="Mushtaq Ahmed">
 
   
-  <meta name="description" content="You deal with futures all the time if you are using play framework. For example, call to external webservices or mongodb via reactivemongo driver &hellip;">
+  <meta name="description" content="The testability of our application is very dear to us. We are currently using Play-Scala on a large project for almost a year now. There is very &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,289 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/12/07/testing-play-without-fakeapplication/">Testing Play Without FakeApplication</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-12-07T14:37:00+05:30" pubdate data-updated="true">Dec 7<span>th</span>, 2013</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>The testability of our application is very dear to us. We are currently using Play-Scala on a large project for almost a year now. There is very little documentation about different ways to test a play app without having to depend on the framework provided helpers like <code>FakeApplication</code>.</p>
+
+<p>The <code>FakeApplication</code> helper does its job as expected by starting a mock application in a test which depends on presence of a running app. It is a great utility to test your routes and controllers. But there are other variants of integration tests that merely read from a config file but required us to start a <code>FakeApplication</code>, which was puzzling. One can argue that reading from a config file makes it an integration test just like testing a route so why not do that. But running a <code>FakeApplication</code> for the large number of tests we had accumulated has some downsides:</p>
+
+<ul>
+<li>It adds verbosity because each single test must be wrapped inside <code>WithApplication</code> helper that internally creates a <code>FakeApplication</code>, starts it and stops it after that that test has finished</li>
+<li>There is a performance overhead in starting and stopping the application each time. Given a large amount of tests we have, it increased the test run time significantly</li>
+</ul>
+
+
+<p>The reason a module needs a running application in the first place is because of dependency on <code>Play.current</code> which provides an implicit instance a play app. For example, consider a module which reads all settings from a config file and captures them into named variables[1]:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">PlayConfigComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">lazy</span> <span class="k">val</span> <span class="n">playConfig</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">PlayConfig</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">class</span> <span class="nc">PlayConfig</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">import</span> <span class="nn">Play.current</span>
+</span><span class='line'>    <span class="k">private</span> <span class="k">val</span> <span class="n">underlying</span> <span class="k">=</span> <span class="nc">Play</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">underlying</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">val</span> <span class="n">dateFormatString</span> <span class="k">=</span> <span class="n">underlying</span><span class="o">.</span><span class="n">getString</span><span class="o">(</span><span class="s">&quot;publishing.date.format&quot;</span><span class="o">)</span>
+</span><span class='line'>    <span class="k">val</span> <span class="n">publishingBatchSize</span> <span class="k">=</span> <span class="n">underlying</span><span class="o">.</span><span class="n">getInt</span><span class="o">(</span><span class="s">&quot;publishing.batch.size&quot;</span><span class="o">)</span>
+</span><span class='line'>    <span class="o">....</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Due to the way it is implemented, <code>Play.configuration</code> requires an implicit instance of a running app which is provided by importing Play.current. Now duing a test run for another module which depends on <code>PlayConfigComp</code> (a very common scenario) if we do not have a running app, Play.current will throw an error[2]</p>
+
+<p>Before we actually write a test, lets create a module which depends on <code>PlayConfigComp</code>. For example, a service which converts a <code>Date</code> between its <code>String</code> and <code>Long</code> representations must get the date-format from the <code>PlayConfigComp</code> like so:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">DateServiceComp</span> <span class="k">extends</span> <span class="nc">PlayConfigComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">lazy</span> <span class="k">val</span> <span class="n">dateUtil</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">DateService</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">class</span> <span class="nc">DateService</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="n">parse</span><span class="o">(</span><span class="n">date</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="n">dateFormat</span><span class="o">.</span><span class="n">parse</span><span class="o">(</span><span class="n">date</span><span class="o">).</span><span class="n">getTime</span>
+</span><span class='line'>    <span class="k">def</span> <span class="n">format</span><span class="o">(</span><span class="n">timeInMillis</span><span class="k">:</span> <span class="kt">Long</span><span class="o">)</span> <span class="k">=</span> <span class="n">dateFormat</span><span class="o">.</span><span class="n">format</span><span class="o">(</span><span class="n">timeInMillis</span><span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">private</span> <span class="k">def</span> <span class="n">dateFormat</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SimpleDateFormat</span><span class="o">(</span><span class="n">playConfig</span><span class="o">.</span><span class="n">dateFormatString</span><span class="o">)</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>To be able to test the <code>DateServiceComp</code>, Play framework provides a nice abstraction called <code>WithApplication</code>. It can be mixed in with each test to handle creation, starting and stopping of the a mock application. The tests look like this:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="s">&quot;date service&quot;</span> <span class="n">should</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="s">&quot;parse with a fake app&quot;</span> <span class="n">in</span> <span class="k">new</span> <span class="nc">WithApplication</span> <span class="k">with</span> <span class="nc">DateServiceComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>     <span class="n">dateService</span><span class="o">.</span><span class="n">parse</span><span class="o">(</span><span class="s">&quot;2013-05-15 00:30:00&quot;</span><span class="o">)</span> <span class="n">mustEqual</span> <span class="mi">1368570600000L</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="s">&quot;format with a fake app&quot;</span> <span class="n">in</span> <span class="k">new</span> <span class="nc">WithApplication</span> <span class="k">with</span> <span class="nc">DateServiceComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>     <span class="n">dateService</span><span class="o">.</span><span class="n">format</span><span class="o">(</span><span class="mi">1368570600000L</span><span class="o">)</span> <span class="n">mustEqual</span> <span class="s">&quot;2013-05-15 00:30:00&quot;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Can you imagine what will happen if we had 10 tests instead of just 2 for the date service and if we have dozens of such services? We will be adding that much boilerplate and it will also impact the total run time for tests.</p>
+
+<p>So how do we solve this? To answer that, we must remember that the main reason we have to have a running play application in tests is our direct dependency on the <code>Play.current</code>. Which gives us a hint that if we factor out the dependency on the <code>Play</code> singleton in a separate module and stub out that module, we can achieve what we want. In our case, the extracted module looks like this:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">PlayAppComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">lazy</span> <span class="k">val</span> <span class="n">playApp</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">PlayApp</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">class</span> <span class="nc">PlayApp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">implicit</span> <span class="k">def</span> <span class="n">app</span> <span class="k">=</span> <span class="nc">Play</span><span class="o">.</span><span class="n">current</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="n">isProd</span> <span class="k">=</span> <span class="nc">Play</span><span class="o">.</span><span class="n">isProd</span>
+</span><span class='line'>    <span class="k">def</span> <span class="n">configuration</span> <span class="k">=</span> <span class="nc">Play</span><span class="o">.</span><span class="n">configuration</span>
+</span><span class='line'>    <span class="k">def</span> <span class="n">getFile</span><span class="o">(</span><span class="n">path</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="nc">Play</span><span class="o">.</span><span class="n">getExistingFile</span><span class="o">(</span><span class="n">path</span><span class="o">).</span><span class="n">getOrThrow</span><span class="o">(</span><span class="n">s</span><span class="s">&quot;File not found at $path.&quot;</span><span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="n">getConfig</span><span class="o">(</span><span class="n">path</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="nc">ConfigFactory</span><span class="o">.</span><span class="n">parseFile</span><span class="o">(</span><span class="n">getFile</span><span class="o">(</span><span class="n">path</span><span class="o">))</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Because we have a separate module, we take this opportunity to encapsulate not only the troublesome <code>Play.current</code> and <code>Play.configuration</code> but also a few other methods on <code>Play</code> singleton that transitively depend on <code>Play.current</code>. Now <code>PlayConfigComp</code> can depend on the new <code>PlayAppComp</code> without requiring implicit instance of <code>Play.current</code>:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">PlayConfigComp</span> <span class="k">extends</span> <span class="nc">PlayAppComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">lazy</span> <span class="k">val</span> <span class="n">playConfig</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">PlayConfig</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">class</span> <span class="nc">PlayConfig</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">private</span> <span class="k">val</span> <span class="n">underlying</span> <span class="k">=</span> <span class="n">playApp</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">underlying</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">val</span> <span class="n">dateFormatString</span> <span class="k">=</span> <span class="n">underlying</span><span class="o">.</span><span class="n">getString</span><span class="o">(</span><span class="s">&quot;publishing.date.format&quot;</span><span class="o">)</span>
+</span><span class='line'>    <span class="k">val</span> <span class="n">publishingBatchSize</span> <span class="k">=</span> <span class="n">underlying</span><span class="o">.</span><span class="n">getInt</span><span class="o">(</span><span class="s">&quot;publishing.batch.size&quot;</span><span class="o">)</span>
+</span><span class='line'>    <span class="o">....</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For the tests, lets stub out <code>PlayAppComp</code>. Stub also gives us the flexibility to override other methods. We specify a different conf file (<code>test.conf</code>) instead of default <code>application.conf</code> and set <code>isProd</code> to false[3]. These are added benefits of the refactoring.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">StubPlayAppComp</span> <span class="k">extends</span> <span class="nc">PlayAppComp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">override</span> <span class="k">lazy</span> <span class="k">val</span> <span class="n">playApp</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">StubPlayApp</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">class</span> <span class="nc">StubPlayApp</span> <span class="k">extends</span> <span class="nc">PlayApp</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">override</span> <span class="k">def</span> <span class="n">isProd</span> <span class="k">=</span> <span class="kc">false</span>
+</span><span class='line'>    <span class="k">override</span> <span class="k">def</span> <span class="n">configuration</span> <span class="k">=</span> <span class="nc">Configuration</span><span class="o">(</span><span class="n">getConfig</span><span class="o">(</span><span class="s">&quot;conf/test.conf&quot;</span><span class="o">))</span>
+</span><span class='line'>    <span class="k">override</span> <span class="k">def</span> <span class="n">getFile</span><span class="o">(</span><span class="n">path</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">File</span><span class="o">(</span><span class="n">path</span><span class="o">)</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using this stub, we can finally run our tests without having to start a fake app! Also, note that we can now create the entire test assembly exactly once per suite and reuse across tests. This also reduces boilerplate and also helps in better compilation times which becomes an issue while using Scala on a large code base (topic for yet nother post, I guess).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="s">&quot;date service&quot;</span> <span class="n">should</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">object</span> <span class="nc">Assembly</span> <span class="k">extends</span> <span class="nc">DateServiceComp</span> <span class="k">with</span> <span class="nc">StubPlayAppComp</span>
+</span><span class='line'>  <span class="k">import</span> <span class="nn">Assembly._</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="s">&quot;parse with a fake app&quot;</span> <span class="n">in</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">dateService</span><span class="o">.</span><span class="n">parse</span><span class="o">(</span><span class="s">&quot;2013-05-15 00:30:00&quot;</span><span class="o">)</span> <span class="n">mustEqual</span> <span class="mi">1368570600000L</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="s">&quot;format with a fake app&quot;</span> <span class="n">in</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">dateService</span><span class="o">.</span><span class="n">format</span><span class="o">(</span><span class="mi">1368570600000L</span><span class="o">)</span> <span class="n">mustEqual</span> <span class="s">&quot;2013-05-15 00:30:00&quot;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you are a Play-Scala developer who ecnoutered the same issue, I hope this blog post gives your one possible solution.There are a lot of other topics around a Play-Scala testing like compile-time reduction, sbt-config settings and dependency resoltuon that I hope to write about in next blog posts.</p>
+
+<p>[1] The reason we structured the code as shown above (a class encapsulated inside a trait) is because we are using Scala&rsquo;s inbuilt name based dependency resolution mechanism. We could have very well used a DI framework like Guice or Spring, but this approach is very flexible and deserves a separate blog post.</p>
+
+<p>[2] One way to solve it could be to convert these tests into pure unit tests by mocking PlayConfig which is what we did in cases where it made sense. The objective here is how to show how to get around the problem where we do want to read from a real config file.</p>
+
+<p>[3] <code>isProd</code> is used by the application in a few places to conditionally change behaviour for production mode.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -192,6 +475,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2013/12/07/testing-play-without-fakeapplication/">Testing Play Without FakeApplication</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2013/03/09/synchronizing-scala-futures-comparing-styles/">Synchronizing Scala Futures: Comparing Styles</a>
       </li>
     
@@ -208,7 +495,7 @@
     </div>
   </div>
   <footer role="contentinfo"><p>
-  Copyright &copy; 2013 - Your Name -
+  Copyright &copy; 2013 - Mushtaq Ahmed -
   <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
 </p>
 
